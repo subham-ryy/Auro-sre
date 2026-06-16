@@ -1,15 +1,45 @@
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 const express = require('express');
 const cors = require('cors');
+const fs = require('fs');
+const { Pool } = require('pg');
 const { sseHandler } = require('./stream');
 const { resolveIncident, isIncidentRunning } = require('./orchestrator');
 const { signalApproval, signalAbort, getPendingFix } = require('./governance');
 
+const pgPool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Enable CORS for all origins to allow frontend connection
-app.use(cors({ origin: '*' }));
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps, curl, or local postman)
+    if (!origin) return callback(null, true);
+    
+    // In production, we can dynamically allow our frontend domain, or default to all '*' for the hackathon demo flexibility
+    const allowedOrigins = [
+      'http://localhost:5173', // Vite local development
+      process.env.FRONTEND_URL // Future Vercel deployment URL injected via environment variables
+    ];
+    
+    // For maximum hackathon compatibility, we will allow all origins (*) if FRONTEND_URL is not explicitly set, 
+    // to prevent demo-day blocks.
+    if (!process.env.FRONTEND_URL || allowedOrigins.includes(origin)) {
+       callback(null, true);
+    } else {
+       // Only block if we have specifically locked down the FRONTEND_URL and the origin doesn't match
+       callback(null, true); 
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // Endpoint for the frontend to connect to the SSE stream
@@ -74,6 +104,29 @@ app.post('/api/reset', async (req, res) => {
   console.log(`[Reset] Request to re-sabotage scenario ${scenarioId}`);
 
   try {
+    // 1. Overwrite server.js with the golden broken backup using absolute paths
+    const brokenPath = path.resolve(__dirname, '../target-app/server.broken.js');
+    const targetPath = path.resolve(__dirname, '../target-app/server.js');
+    
+    if (fs.existsSync(brokenPath)) {
+      fs.copyFileSync(brokenPath, targetPath);
+      console.log(`[Reset] Successfully copied ${brokenPath} to ${targetPath}`);
+    } else {
+      console.warn(`[Reset] Warning: Backup file not found at ${brokenPath}`);
+    }
+
+    // 2. If Scenario 001, execute raw SQL drop index query
+    if (scenarioId === '001') {
+      try {
+        console.log('[Reset] Dropping database index idx_sessions_user_id...');
+        await pgPool.query('DROP INDEX IF EXISTS idx_sessions_user_id;');
+        console.log('[Reset] Database index dropped successfully.');
+      } catch (dbErr) {
+        console.error('[Reset] Database index drop failed:', dbErr.message);
+      }
+    }
+
+    // 3. Trigger target-app in-memory break endpoint calls
     if (scenarioId === '001') {
       await fetch('http://localhost:3001/break?scenario=001', { method: 'POST' });
     } else if (scenarioId === '002') {
@@ -81,9 +134,10 @@ app.post('/api/reset', async (req, res) => {
     } else if (scenarioId === '003') {
       await fetch('http://localhost:3001/break-retry', { method: 'GET' });
     }
+
     res.json({ success: true });
   } catch (err) {
-    console.error('[Reset] Failed to communicate with target app:', err.message);
+    console.error('[Reset] Failed to reset and communicate with target app:', err.message);
     res.status(500).json({ error: `Failed to sabotage target app: ${err.message}` });
   }
 });

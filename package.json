@@ -1,0 +1,10 @@
+{
+  "name": "autosre-monorepo",
+  "version": "1.0.0",
+  "description": "AutoSRE Autonomous Reliability Command Monorepo",
+  "main": "start.js",
+  "scripts": {
+    "start": "node start.js"
+  },
+  "dependencies": {}
+}

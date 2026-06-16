@@ -192,3 +192,14 @@
   0%, 100% { opacity: 0.25; }
   50%       { opacity: 0.6; }
 }
+
+@keyframes pulseBorder {
+  0%, 100% {
+    border-color: rgba(245, 158, 11, 0.75);
+    box-shadow: 0 0 40px rgba(245, 158, 11, 0.2), 0 0 80px rgba(245, 158, 11, 0.05);
+  }
+  50% {
+    border-color: rgba(251, 191, 36, 1);
+    box-shadow: 0 0 60px rgba(245, 158, 11, 0.65), 0 0 120px rgba(245, 158, 11, 0.2);
+  }
+}

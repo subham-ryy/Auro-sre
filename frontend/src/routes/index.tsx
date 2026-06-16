@@ -348,6 +348,46 @@ function AutoSRE() {
     return () => clearInterval(id);
   }, [isIncidentLive]);
 
+  // Live metrics polling during active incident
+  useEffect(() => {
+    if (!isIncidentLive) return;
+
+    const poll = async () => {
+      try {
+        const res = await fetch("http://localhost:3001/health");
+        if (res.ok) {
+          const data = await res.json();
+          const latency = data.latency_ms || 38;
+          setLatencyData((prev) => {
+            const next = prev.slice(1);
+            next.push(latency);
+            return next;
+          });
+        } else {
+          // If status is degraded (e.g. 500), it might still contain latency data
+          const data = await res.json().catch(() => ({}));
+          const latency = data.latency_ms || 5000 + Math.random() * 500;
+          setLatencyData((prev) => {
+            const next = prev.slice(1);
+            next.push(latency);
+            return next;
+          });
+        }
+      } catch (err) {
+        // If connection fails (e.g. server down or hung during pool exhaustion)
+        setLatencyData((prev) => {
+          const next = prev.slice(1);
+          next.push(8000 + Math.random() * 800);
+          return next;
+        });
+      }
+    };
+
+    poll();
+    const id = setInterval(poll, 1500);
+    return () => clearInterval(id);
+  }, [isIncidentLive]);
+
   // Cost ticker
   useEffect(() => {
     if (!isIncidentLive) return;
@@ -512,9 +552,20 @@ function AutoSRE() {
   }, [latencyData]);
 
   // Metrics
+  const lastLatency = latencyData[latencyData.length - 1] || 142;
   const metrics = isIncidentLive
-    ? { p95: "12,400ms", err: "38.4%", rps: "0.1k", up: "99.84%" }
-    : { p95: "142ms", err: "0.21%", rps: "3.4k", up: "99.98%" };
+    ? {
+        p95: `${Math.round(lastLatency).toLocaleString()}ms`,
+        err: lastLatency > 500 ? "38.4%" : "0.21%",
+        rps: lastLatency > 500 ? "0.1k" : "3.4k",
+        up: lastLatency > 500 ? "99.84%" : "99.98%",
+      }
+    : {
+        p95: `${Math.round(lastLatency).toLocaleString()}ms`,
+        err: "0.21%",
+        rps: "3.4k",
+        up: "99.98%",
+      };
 
   const chartColor = spike === "spike" ? "#ef4444" : "#4ade80";
 
@@ -792,7 +843,7 @@ function AutoSRE() {
               style={{
                 background: "#0a0f0a",
                 border: "2px solid #f59e0b",
-                boxShadow: "0 0 60px #f59e0b33, 0 0 120px #f59e0b11",
+                animation: "pulseBorder 2s infinite ease-in-out",
               }}
             >
               {/* Header */}
@@ -832,6 +883,40 @@ function AutoSRE() {
                 >
                   RISK: {pendingFix.estimated_risk.toUpperCase()}
                 </span>
+              </div>
+
+              {/* Diagnostic report showing problem & root cause */}
+              {(pendingFix.problem || pendingFix.rootCause) && (
+                <div
+                  className="rounded-md p-3 mb-3 font-mono-term text-[10px] leading-relaxed"
+                  style={{
+                    background: "#050905",
+                    border: "1px solid #f59e0b33",
+                    color: "#c8f5d8",
+                  }}
+                >
+                  {pendingFix.problem && (
+                    <div className="mb-2">
+                      <span className="text-amber-500 font-bold block mb-0.5 uppercase tracking-wider text-[8.5px] font-orbitron">
+                        🚨 DETECTED SYMPTOMS
+                      </span>
+                      <p className="opacity-95">{pendingFix.problem}</p>
+                    </div>
+                  )}
+                  {pendingFix.rootCause && (
+                    <div>
+                      <span className="text-amber-500 font-bold block mb-0.5 uppercase tracking-wider text-[8.5px] font-orbitron">
+                        🔍 IDENTIFIED ROOT CAUSE
+                      </span>
+                      <p className="opacity-95">{pendingFix.rootCause}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Label for code block */}
+              <div className="text-[8.5px] tracking-[0.2em] font-orbitron text-emerald-400 font-bold mb-1.5 uppercase">
+                PROPOSED CODE REMEDIATION
               </div>
 
               {/* Code block */}
@@ -1140,11 +1225,30 @@ function AutoSRE() {
 }
 
 function TermRow({ line, caret }: { line: TermLine; caret?: boolean }) {
+  const isHighlight =
+    line.text.toLowerCase().includes("sandbox") ||
+    line.text.includes("✓ Connection pool") ||
+    line.text.includes("✓ Retry storm") ||
+    line.text.includes("✓ Query performance");
+
+  const rowStyle = isHighlight
+    ? {
+        fontSize: "12.5px",
+        fontWeight: "bold" as const,
+        textShadow: "0 0 8px rgba(251, 191, 36, 0.4)",
+      }
+    : {};
+
+  const prefixColor = isHighlight ? "#fbbf24" : line.prefixColor;
+  const textColor = isHighlight ? "#fbbf24" : "#c8f5d8";
+
   return (
-    <div className="flex gap-2 whitespace-pre-wrap">
-      <span style={{ color: "#2a3d2a", minWidth: 28 }}>{String(line.n).padStart(3, "0")}</span>
-      <span style={{ color: line.prefixColor, minWidth: 120 }}>{line.prefix}</span>
-      <span style={{ color: "#c8f5d8", flex: 1 }}>
+    <div className="flex gap-2 whitespace-pre-wrap py-0.5" style={rowStyle}>
+      <span style={{ color: "#2a3d2a", minWidth: 28, fontSize: isHighlight ? "11.5px" : undefined }}>
+        {String(line.n).padStart(3, "0")}
+      </span>
+      <span style={{ color: prefixColor, minWidth: 120 }}>{line.prefix}</span>
+      <span style={{ color: textColor, flex: 1 }}>
         {line.text}
         {caret && <span style={{ animation: "blinkCursor 1s infinite" }}>█</span>}
       </span>

@@ -167,7 +167,9 @@ app.get('/break-pool', async (req, res) => {
 
   for (let i = 0; i < leakCount; i++) {
     try {
-      try { const result = await client.query('SELECT * FROM table'); } finally { client.release(); }
+      const client = await pool.connect();
+      await client.query('SELECT NOW()');
+      // DELIBERATELY do NOT call client.release() — this is the bug we want the AI to find
       leaked++;
       console.log(`Leaked connection ${leaked}/${leakCount} (pool total: ${pool.totalCount}, idle: ${pool.idleCount}, waiting: ${pool.waitingCount})`);
     } catch (err) {
