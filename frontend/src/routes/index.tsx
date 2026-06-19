@@ -195,7 +195,7 @@ function AutoSRE() {
 
   // SSE Connection
   useEffect(() => {
-    const eventSource = new EventSource("http://localhost:3000/stream");
+    const eventSource = new EventSource("https://auto-sre-production.up.railway.app/stream");
 
     eventSource.onmessage = (event) => {
       const data = JSON.parse(event.data);
@@ -505,7 +505,7 @@ function AutoSRE() {
     setSpike("spike");
 
     try {
-      const res = await fetch("http://localhost:3000/trigger", {
+      const res = await fetch("https://auto-sre-production.up.railway.app/trigger", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ scenarioId: selectedScenario, autoExecute }),
@@ -525,13 +525,13 @@ function AutoSRE() {
   const handleApprove = async () => {
     setPendingFix(null);
     appendLine("[Governance]", "#86efac", "✓ Operator confirmed deployment. Unblocking orchestrator...");
-    await fetch("http://localhost:3000/api/incident/approve", { method: "POST" }).catch(console.error);
+    await fetch("https://auto-sre-production.up.railway.app/api/incident/approve", { method: "POST" }).catch(console.error);
   };
 
   const handleAbort = async () => {
     setPendingFix(null);
     appendLine("[Governance]", "#ef4444", "⛔ Operator aborted deployment.");
-    await fetch("http://localhost:3000/api/incident/abort", { method: "POST" }).catch(console.error);
+    await fetch("https://auto-sre-production.up.railway.app/api/incident/abort", { method: "POST" }).catch(console.error);
   };
 
   const utc = now.toISOString().slice(11, 19);
@@ -555,17 +555,17 @@ function AutoSRE() {
   const lastLatency = latencyData[latencyData.length - 1] || 142;
   const metrics = isIncidentLive
     ? {
-        p95: `${Math.round(lastLatency).toLocaleString()}ms`,
-        err: lastLatency > 500 ? "38.4%" : "0.21%",
-        rps: lastLatency > 500 ? "0.1k" : "3.4k",
-        up: lastLatency > 500 ? "99.84%" : "99.98%",
-      }
+      p95: `${Math.round(lastLatency).toLocaleString()}ms`,
+      err: lastLatency > 500 ? "38.4%" : "0.21%",
+      rps: lastLatency > 500 ? "0.1k" : "3.4k",
+      up: lastLatency > 500 ? "99.84%" : "99.98%",
+    }
     : {
-        p95: `${Math.round(lastLatency).toLocaleString()}ms`,
-        err: "0.21%",
-        rps: "3.4k",
-        up: "99.98%",
-      };
+      p95: `${Math.round(lastLatency).toLocaleString()}ms`,
+      err: "0.21%",
+      rps: "3.4k",
+      up: "99.98%",
+    };
 
   const chartColor = spike === "spike" ? "#ef4444" : "#4ade80";
 
@@ -1209,7 +1209,7 @@ function AutoSRE() {
                   setResolvedScenarios((prev) => prev.filter((id) => id !== selectedScenario));
 
                   try {
-                    const res = await fetch("http://localhost:3000/api/reset", {
+                    const res = await fetch("https://auto-sre-production.up.railway.app/api/reset", {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({ scenarioId: selectedScenario }),
@@ -1252,10 +1252,10 @@ function TermRow({ line, caret }: { line: TermLine; caret?: boolean }) {
 
   const rowStyle = isHighlight
     ? {
-        fontSize: "12.5px",
-        fontWeight: "bold" as const,
-        textShadow: "0 0 8px rgba(251, 191, 36, 0.4)",
-      }
+      fontSize: "12.5px",
+      fontWeight: "bold" as const,
+      textShadow: "0 0 8px rgba(251, 191, 36, 0.4)",
+    }
     : {};
 
   const prefixColor = isHighlight ? "#fbbf24" : line.prefixColor;
