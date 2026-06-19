@@ -129,19 +129,25 @@ app.get('/break-retry', async (req, res) => {
 
   // Naive retry loop: NO exponential backoff, NO jitter, NO delay
   // This is the bug — it hammers the downstream service and holds threads open
-  for (let i = 0; i < MAX_RETRIES; i++) {
-    attempt++;
+  const setTimeout = require('timers').setTimeout;
+const fetch = require('node-fetch');
+
+const handler = async (req, res) => {
+  let retryCount = 0;
+  let delay = 500;
+  while (retryCount < 5) {
     try {
-      console.log(`[Target] Attempt ${attempt}/${MAX_RETRIES}: Calling downstream payment API...`);
-      await callDownstreamApi();
-      // If we get here (we won't), success
-      break;
-    } catch (err) {
-      lastError = err;
-      console.log(`[Target] Downstream API failed. Retrying immediately... (attempt ${attempt}/${MAX_RETRIES})`);
-      // BUG: no await sleep() here — immediate retry without any backoff
+      const response = await fetch('https://api.example.com/api/data');
+      return res.json(response);
+    } catch (error) {
+      retryCount++;
+      console.log(`Retry ${retryCount}: ${error}`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      delay *= 2;
     }
   }
+  return res.status(500).json({ error: 'Max retries exceeded' });
+}
 
   console.log(`[Target] All ${MAX_RETRIES} retries exhausted. Thread Pool Saturated. HTTP 500 returned.`);
   res.status(500).json({
@@ -167,7 +173,9 @@ app.get('/break-pool', async (req, res) => {
 
   for (let i = 0; i < leakCount; i++) {
     try {
-      try { const result = await client.query('SELECT * FROM table'); } finally { client.release(); }
+      const client = await pool.connect();
+      await client.query('SELECT NOW()');
+      // DELIBERATELY do NOT call client.release() — this is the bug we want the AI to find
       leaked++;
       console.log(`Leaked connection ${leaked}/${leakCount} (pool total: ${pool.totalCount}, idle: ${pool.idleCount}, waiting: ${pool.waitingCount})`);
     } catch (err) {

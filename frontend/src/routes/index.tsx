@@ -985,7 +985,7 @@ function AutoSRE() {
             }
             full
           >
-            <div className="absolute top-10 left-4 z-20 w-56 p-2.5 rounded-lg border border-emerald-500/30 bg-emerald-950/20 backdrop-blur-md shadow-2xl">
+            <div className="absolute top-10 left-4 z-20 w-58 p-2.5 rounded-lg border border-emerald-500/30 bg-emerald-950/20 backdrop-blur-md shadow-2xl">
               <label className="text-[8.5px] tracking-[0.22em] font-orbitron text-emerald-400 font-black mb-1.5 block uppercase">
                 TARGET INCIDENT PROFILE
               </label>
@@ -1000,13 +1000,13 @@ function AutoSRE() {
                     background: "radial-gradient(ellipse at top, #0d1424 0%, #070a10 100%)",
                   }}
                 >
-                  <option value="001" className="bg-[#090d16] text-emerald-100">
+                  <option value="001" className="bg-[#090d16] text-emerald-100" title="Simulates a missing composite database index causing query bottlenecks.">
                     SCN 001: MISSING INDEX
                   </option>
-                  <option value="002" className="bg-[#090d16] text-emerald-100">
+                  <option value="002" className="bg-[#090d16] text-emerald-100" title="Simulates connection pool exhaustion by leaking DB clients.">
                     SCN 002: CONN POOL LEAK
                   </option>
-                  <option value="003" className="bg-[#090d16] text-emerald-100">
+                  <option value="003" className="bg-[#090d16] text-emerald-100" title="Simulates a tight retry storm that saturates the thread pool.">
                     SCN 003: RETRY STORM
                   </option>
                 </select>
@@ -1015,6 +1015,25 @@ function AutoSRE() {
                     <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
                   </svg>
                 </div>
+              </div>
+
+              {/* Dynamic Scenario Description Box */}
+              <div className="mt-2 text-[9px] font-mono-term text-[#c8f5d8] opacity-85 leading-normal border-t border-emerald-500/15 pt-2">
+                {selectedScenario === "001" && (
+                  <span>
+                    <strong className="text-emerald-400">Missing DB Index:</strong> Slows Query 402, triggering transaction backlogs and connection timeouts.
+                  </span>
+                )}
+                {selectedScenario === "002" && (
+                  <span>
+                    <strong className="text-emerald-400">Connection Pool Leak:</strong> Leaks connections in /break-pool, freezing queries when max pool limit is reached.
+                  </span>
+                )}
+                {selectedScenario === "003" && (
+                  <span>
+                    <strong className="text-emerald-400">Retry Storm:</strong> Hammers downstream API without delays inside /break-retry, saturating the thread pool.
+                  </span>
+                )}
               </div>
             </div>
             <AgentNetwork agentStatuses={agentStatuses} skepticVerdict={skepticVerdict} activeEdge={activeEdge} />
