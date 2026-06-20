@@ -42,10 +42,11 @@ function pipeStream(processName, stream, outputStream = process.stdout) {
 
 // Spawn Orchestrator Backend
 function startOrchestrator() {
-  console.log(`[LAUNCHER] Starting Orchestrator Backend: node ${orchestratorPath}`);
+  const orchestratorPort = process.env.PORT || '3000';
+  console.log(`[LAUNCHER] Starting Orchestrator Backend: node ${orchestratorPath} on port ${orchestratorPort}`);
   orchestratorProcess = spawn('node', [orchestratorPath], {
     cwd: path.dirname(orchestratorPath),
-    env: { ...process.env, PORT: '3000' },
+    env: { ...process.env, PORT: orchestratorPort },
   });
 
   pipeStream('orchestrator', orchestratorProcess.stdout);
