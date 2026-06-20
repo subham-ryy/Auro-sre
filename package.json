@@ -4,6 +4,7 @@
   "description": "AutoSRE Autonomous Reliability Command Monorepo",
   "main": "start.js",
   "scripts": {
+    "postinstall": "npm install --prefix backend && npm install --prefix target-app",
     "start": "node start.js"
   },
   "dependencies": {}
