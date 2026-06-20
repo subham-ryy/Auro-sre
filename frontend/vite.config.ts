@@ -14,5 +14,23 @@ export default defineConfig({
   },
   nitro: {
     preset: "vercel",
+    vercel: {
+      config: {
+        routes: [
+          {
+            src: "/assets/(.*)",
+            headers: { "cache-control": "public, max-age=31536000, immutable" },
+            continue: true,
+          },
+          {
+            handle: "filesystem",
+          },
+          {
+            src: "/(.*)",
+            dest: "/__server",
+          },
+        ],
+      },
+    },
   },
 });
