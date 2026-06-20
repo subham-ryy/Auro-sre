@@ -316,7 +316,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
-      const pgClient = new PgClient({ connectionString, ssl: { rejectUnauthorized: false } });
+      const pgClient = new PgClient({ connectionString, family: 4, ssl: { rejectUnauthorized: false } });
 
       try {
         await pgClient.connect();

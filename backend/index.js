@@ -14,6 +14,7 @@ const { signalApproval, signalAbort, getPendingFix } = require('./governance');
 
 const pgPool = new Pool({
   connectionString: process.env.DATABASE_URL,
+  family: 4,
 });
 
 const app = express();

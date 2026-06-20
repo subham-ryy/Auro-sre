@@ -16,6 +16,7 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 const pgPool = new Pool({
   connectionString: process.env.DATABASE_URL,
+  family: 4,
 });
 
 function applyCodePatch(fileContent, patchCode, scenarioId) {

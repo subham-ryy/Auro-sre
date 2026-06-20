@@ -5,6 +5,7 @@ const { Pool } = require('pg');
 // Use DATABASE_URL from environment
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
+  family: 4,
   // Strict pool settings to make exhaustion scenarios easier to trigger
   max: parseInt(process.env.DB_POOL_MAX || '10'),
   idleTimeoutMillis: 30000,
