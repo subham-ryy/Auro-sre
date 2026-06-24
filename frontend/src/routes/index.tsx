@@ -1,6 +1,20 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+/* eslint-disable no-var */
+declare global {
+  var pendo: {
+    track: (name: string, props?: Record<string, any>) => void;
+  } | undefined;
+}
+/* eslint-enable no-var */
+
+const SCENARIO_NAMES: Record<string, string> = {
+  "001": "Missing Index",
+  "002": "Connection Pool Leak",
+  "003": "Retry Storm",
+};
+
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
@@ -147,6 +161,14 @@ function AutoSRE() {
     selectedScenarioRef.current = selectedScenario;
   }, [selectedScenario]);
 
+  const autoExecuteRef = useRef(autoExecute);
+  useEffect(() => { autoExecuteRef.current = autoExecute; }, [autoExecute]);
+
+  const downtimeCostRef = useRef(0);
+  useEffect(() => { downtimeCostRef.current = downtimeCost; }, [downtimeCost]);
+
+  const incidentStartTimeRef = useRef<number | null>(null);
+
   const applyStatePatch = (patch: any) => {
     if (patch.isIncidentLive !== undefined) setIsIncidentLive(patch.isIncidentLive);
     if (patch.activeAgent !== undefined) setActiveAgent(patch.activeAgent);
@@ -240,12 +262,32 @@ function AutoSRE() {
           statePatch.activeAgent = "none";
           statePatch.activeEdge = null;
 
+          const currentScenario = selectedScenarioRef.current;
+          const resolutionTimeMs = incidentStartTimeRef.current ? Date.now() - incidentStartTimeRef.current : undefined;
+
           if (text.includes("RESOLVED")) {
-            const currentScenario = selectedScenarioRef.current;
             setResolvedScenarios((prev) => {
               if (prev.includes(currentScenario)) return prev;
               return [...prev, currentScenario];
             });
+            if (typeof pendo !== "undefined") {
+              pendo.track("incident_resolved", {
+                scenarioId: currentScenario,
+                scenarioName: SCENARIO_NAMES[currentScenario],
+                downtimeCost: Math.round(downtimeCostRef.current),
+                resolutionTimeMs: resolutionTimeMs,
+                governanceMode: autoExecuteRef.current ? "auto_remediation" : "human_in_the_loop",
+              });
+            }
+          } else {
+            if (typeof pendo !== "undefined") {
+              pendo.track("incident_aborted", {
+                scenarioId: currentScenario,
+                scenarioName: SCENARIO_NAMES[currentScenario],
+                downtimeCost: Math.round(downtimeCostRef.current),
+                governanceMode: autoExecuteRef.current ? "auto_remediation" : "human_in_the_loop",
+              });
+            }
           }
           runningRef.current = false;
         }
@@ -279,6 +321,12 @@ function AutoSRE() {
         // Backend is awaiting human approval — hold the overlay until the typewriter finished typing
         setHeldGovernancePayload(payload);
       } else if (type === "summary_ready") {
+        if (typeof pendo !== "undefined") {
+          pendo.track("post_incident_summary_generated", {
+            scenarioId: selectedScenarioRef.current,
+            summaryLength: payload.summary?.length || 0,
+          });
+        }
         setIncidentSummary(payload.summary);
         setSummaryLoading(false);
       } else if (type === "agent_update") {
@@ -490,6 +538,7 @@ function AutoSRE() {
       clearTimeout(pauseTimerRef.current);
       pauseTimerRef.current = null;
     }
+    incidentStartTimeRef.current = Date.now();
     setAgentStatuses({
       detective: "idle",
       fixer: "idle",
@@ -514,21 +563,52 @@ function AutoSRE() {
         const errData = await res.json().catch(() => ({}));
         throw new Error(errData.error || "Failed to trigger incident");
       }
+      if (typeof pendo !== "undefined") {
+        pendo.track("incident_simulation_triggered", {
+          scenarioId: selectedScenario,
+          scenarioName: SCENARIO_NAMES[selectedScenario],
+          autoExecute: autoExecute,
+          governanceMode: autoExecute ? "auto_remediation" : "human_in_the_loop",
+        });
+      }
     } catch (err: any) {
       console.error("Failed to trigger incident:", err);
       appendLine("[System]", "#ef4444", `Error: ${err.message || "Failed to connect to orchestrator."}`);
+      if (typeof pendo !== "undefined") {
+        pendo.track("incident_trigger_failed", {
+          scenarioId: selectedScenario,
+          errorMessage: (err.message || "Failed to connect to orchestrator.").substring(0, 200),
+          autoExecute: autoExecute,
+        });
+      }
       setIsIncidentLive(false);
       runningRef.current = false;
     }
   };
 
   const handleApprove = async () => {
+    if (typeof pendo !== "undefined") {
+      pendo.track("governance_fix_approved", {
+        fixType: pendingFix?.fix_type || "unknown",
+        target: pendingFix?.target || "unknown",
+        estimatedRisk: pendingFix?.estimated_risk || "unknown",
+        scenarioId: pendingFix?.scenarioId || selectedScenario,
+      });
+    }
     setPendingFix(null);
     appendLine("[Governance]", "#86efac", "✓ Operator confirmed deployment. Unblocking orchestrator...");
     await fetch("https://auto-sre-production.up.railway.app/api/incident/approve", { method: "POST" }).catch(console.error);
   };
 
   const handleAbort = async () => {
+    if (typeof pendo !== "undefined") {
+      pendo.track("governance_fix_rejected", {
+        fixType: pendingFix?.fix_type || "unknown",
+        target: pendingFix?.target || "unknown",
+        estimatedRisk: pendingFix?.estimated_risk || "unknown",
+        scenarioId: pendingFix?.scenarioId || selectedScenario,
+      });
+    }
     setPendingFix(null);
     appendLine("[Governance]", "#ef4444", "⛔ Operator aborted deployment.");
     await fetch("https://auto-sre-production.up.railway.app/api/incident/abort", { method: "POST" }).catch(console.error);
@@ -778,7 +858,15 @@ function AutoSRE() {
 
               <button
                 id="auto-execute-toggle"
-                onClick={() => setAutoExecute((v) => !v)}
+                onClick={() => {
+                  if (typeof pendo !== "undefined") {
+                    pendo.track("governance_mode_changed", {
+                      previousMode: autoExecute ? "auto_remediation" : "human_in_the_loop",
+                      newMode: !autoExecute ? "auto_remediation" : "human_in_the_loop",
+                    });
+                  }
+                  setAutoExecute((v) => !v);
+                }}
                 disabled={isIncidentLive}
                 className="relative flex-shrink-0 w-12 h-6 rounded-full transition-all duration-300 border disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{
@@ -1079,6 +1167,12 @@ function AutoSRE() {
                 >
                   <button
                     onClick={() => {
+                      if (typeof pendo !== "undefined") {
+                        pendo.track("post_incident_report_viewed", {
+                          scenarioId: selectedScenario,
+                          summaryAlreadyLoaded: !!incidentSummary,
+                        });
+                      }
                       setShowSummary(true);
                       if (!incidentSummary) setSummaryLoading(true);
                     }}
@@ -1208,6 +1302,7 @@ function AutoSRE() {
                   setShowRebreakModal(false);
                   setResolvedScenarios((prev) => prev.filter((id) => id !== selectedScenario));
 
+                  let resetSuccess = true;
                   try {
                     const res = await fetch("https://auto-sre-production.up.railway.app/api/reset", {
                       method: "POST",
@@ -1219,6 +1314,15 @@ function AutoSRE() {
                     }
                   } catch (err) {
                     console.error("Failed to reset scenario environment:", err);
+                    resetSuccess = false;
+                  }
+
+                  if (typeof pendo !== "undefined") {
+                    pendo.track("scenario_environment_reset", {
+                      scenarioId: selectedScenario,
+                      scenarioName: SCENARIO_NAMES[selectedScenario],
+                      resetSuccess: resetSuccess,
+                    });
                   }
 
                   startIncident();
